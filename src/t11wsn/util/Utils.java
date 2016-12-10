@@ -25,11 +25,6 @@ public class Utils {
         return pdf((x - mu) / sigma) / sigma;
     }
 
-    public static double mean(List<Double> m) {
-        double sum = 0;
-        for (double v : m) sum += v;
-        return sum / m.size();
-    }
 
     public static double entropy(double v) { return Math.log(v * Math.sqrt(2 * Math.PI * Math.E)); }
 
@@ -37,6 +32,8 @@ public class Utils {
     public static float lerp(float a, float b, float f) { return (a * (1.0f - f)) + (b * f); }
 
     public static float clamp(float val, float min, float max) { return Math.max(min, Math.min(max, val)); }
+
+    public static double mean(List<Double> m) { return m.stream().mapToDouble(Double::doubleValue).average().orElse(0); }
 
     public static double median(double[] l) {
         if (l.length % 2 == 0) {

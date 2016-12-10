@@ -65,9 +65,9 @@ public class GUI {
                     .sorted().toArray());
 
         });
-//        energyGraph.addSequence("Energy Mean", () -> {
-//            return world.getSensors().stream().mapToDouble(Sensor::getEnergy).average().orElse(0);
-//        });
+        energyGraph.addSequence("Energy Mean", () -> {
+            return world.getSensors().stream().mapToDouble(Sensor::getEnergy).average().orElse(0);
+        });
 
         energyGraph.display();
     }

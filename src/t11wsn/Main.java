@@ -11,14 +11,15 @@ import t11wsn.gui.GUI;
 import t11wsn.world.World;
 import t11wsn.world.entity.Sensor;
 import uchicago.src.sim.engine.Schedule;
-import uchicago.src.sim.engine.ScheduleBase;
 import uchicago.src.sim.engine.SimInit;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Main extends Repast3Launcher{
 
     private ContainerController mainContainer;
+    private ArrayList<SensorAgent> agents = new ArrayList<>();
     private World world;
     private GUI gui;
 
@@ -33,7 +34,7 @@ public class Main extends Repast3Launcher{
 
     private void initializeSimulation() {
         world = new World();
-        world.createSimulation();
+        world.createSimulation(World.Scenario.TEST);
 
         initializeAgents();
         initializeDisplay();
@@ -43,9 +44,10 @@ public class Main extends Repast3Launcher{
     private void initializeAgents() {
         List<Sensor> sensorsList = this.world.getSensors();
         for (int i = 0; i < sensorsList.size(); ++i) {
-            SensorAgent a = new SensorAgent(sensorsList.get(i));
+            SensorAgent a = new SensorAgent(sensorsList.get(i), agents);
+            agents.add(a);
             try {
-                mainContainer.acceptNewAgent("Sensor ["+i+"]", a).start();
+                mainContainer.acceptNewAgent("["+i+"]", a).start();
             } catch (StaleProxyException e) { e.printStackTrace(); }
         }
     }

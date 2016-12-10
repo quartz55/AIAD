@@ -14,7 +14,7 @@ import java.util.stream.IntStream;
 public class World {
 
     public enum Scenario {
-        EVENLY_SPACED(50), ALL_AT_END(30), RANDOM(50);
+        EVENLY_SPACED(50), ALL_AT_END(30), RANDOM(50), TEST(2);
         private int numSensors;
 
         Scenario(int numSensors) {
@@ -86,6 +86,12 @@ public class World {
                     this.addSensor(x, y);
                 }
                 break;
+            case TEST:
+                for (int i = 0; i < s.numSensors; ++i) {
+                    int x = this.width/2 - (s.numSensors * 5) / 2 + i * 5;
+                    int y = this.height/2;
+                    this.addSensor(x, y);
+                }
         }
     }
 

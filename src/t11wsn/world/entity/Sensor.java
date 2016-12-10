@@ -47,7 +47,7 @@ public class Sensor extends Entity{
                 this.energy -= 0.1;
                 break;
             case HIBERNATE:
-                this.energy -= 0.001;
+                this.energy -= 0.00001;
                 break;
             case OFF:
                 break;
@@ -58,19 +58,20 @@ public class Sensor extends Entity{
     }
 
     public void hibernate() {
-        if (this.state != State.OFF)
+        if (this.state != State.OFF) {
             this.state = State.HIBERNATE;
-        System.out.println("SLEEPING");
+        }
     }
 
     public void wakeUp() {
-        if (this.state != State.OFF)
+        if (this.state != State.OFF) {
             this.state = State.ON;
-        System.out.println("WAKING UP");
+        }
     }
 
     public ArrayList<Double> getReadings() { return readings; }
-    public double getLastReading() { return readings.get(readings.size()-1); }
+    public double getLastReading() { return readings.isEmpty() ? 0 : readings.get(readings.size()-1); }
+
     public State getState() { return state; }
     public double getEnergy() { return energy; }
     public World getWorld() { return world; }

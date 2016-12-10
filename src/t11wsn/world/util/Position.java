@@ -28,4 +28,6 @@ public class Position implements Serializable{
     public double distanceTo(Position p) {
         return Math.sqrt(distanceToSquared(p));
     }
+
+    public String toString() { return "["+x+","+y+"]"; }
 }

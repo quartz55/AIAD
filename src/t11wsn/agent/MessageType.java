@@ -10,4 +10,6 @@ public class MessageType {
 
     public static final int BREAK = 5;
     public static final int WITHDRAW = 6;
+
+    public static final int INFORM_POSITION = 7;
 }

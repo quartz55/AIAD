@@ -48,6 +48,8 @@ public class World {
                 w.setPollution(riverFlow(w.getPosition()));
             }
         }
+
+        this.sensorCells.forEach(s -> s.update(tick));
     }
 
     public void createSimulation() { createSimulation(Scenario.EVENLY_SPACED); }

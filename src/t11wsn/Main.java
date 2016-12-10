@@ -71,12 +71,10 @@ public class Main extends Repast3Launcher{
     public String[] getInitParam() {
         return new String[] {};
     }
-
     @Override
     public String getName() {
         return "A Multi-agent Approach to Energy-Aware Wireless Sensor Networks Organization";
     }
-
 
     public static void main(String[] args) {
         SimInit init = new SimInit();

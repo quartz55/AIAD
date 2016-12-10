@@ -17,19 +17,24 @@ public class SensorGUI implements Drawable{
 
     @Override
     public void draw(SimGraphics simGraphics) {
-        float r, g;
+        float r, g, b;
         double e = this.entity.getEnergy();
-        if (e > Sensor.MAX_ENERGY / 2) {
+        if (this.entity.getState() == Sensor.State.HIBERNATE) {
+            r = g = b = 1.0f;
+        }
+        else if (e > Sensor.MAX_ENERGY / 2) {
             g = 1.0f;
             r = 1.0f - (float) Utils.i_lerp(Sensor.MAX_ENERGY / 2, Sensor.MAX_ENERGY, e);
+            b = 0;
         } else if (e > 0){
             r = 1.0f;
             g = (float) Utils.i_lerp(0, Sensor.MAX_ENERGY / 2, e);
+            b = 0;
         }
         else {
-            r = g = 0.0f;
+            r = g = b = 0.0f;
         }
-        simGraphics.drawFastCircle(new Color(r, g, 0));
+        simGraphics.drawFastCircle(new Color(r, g, b));
     }
 
     @Override

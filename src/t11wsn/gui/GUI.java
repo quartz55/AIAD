@@ -10,7 +10,6 @@ import uchicago.src.sim.analysis.OpenSequenceGraph;
 import uchicago.src.sim.gui.DisplaySurface;
 import uchicago.src.sim.gui.Object2DDisplay;
 import uchicago.src.sim.space.Object2DGrid;
-
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 
@@ -75,7 +74,7 @@ public class GUI {
     public void cleanup() {
         this.dsurf.dispose();
         this.energyGraph.dispose();
-    }
+        }
 
     public void render() {
         this.dsurf.updateDisplay();

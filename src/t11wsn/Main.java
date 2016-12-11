@@ -10,18 +10,32 @@ import t11wsn.agent.SensorAgent;
 import t11wsn.gui.GUI;
 import t11wsn.world.World;
 import t11wsn.world.entity.Sensor;
+import uchicago.src.reflector.ListPropertyDescriptor;
 import uchicago.src.sim.engine.Schedule;
 import uchicago.src.sim.engine.SimInit;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 
 public class Main extends Repast3Launcher{
 
+    private World.Scenario scenario = World.Scenario.EVENLY_SPACED;
     private ContainerController mainContainer;
     private ArrayList<SensorAgent> agents = new ArrayList<>();
     private World world;
     private GUI gui;
+
+    @Override
+    public void setup() {
+        super.setup();
+
+        Vector<World.Scenario> vecScenarios = new Vector<>();
+        for (int i = 0; i < World.Scenario.values().length; i++)
+            vecScenarios.add(World.Scenario.values()[i]);
+        descriptors.put("Scenario", new ListPropertyDescriptor("Scenario", vecScenarios));
+        vecScenarios.forEach(System.out::println);
+    }
 
     @Override
     protected void launchJADE() {
@@ -34,7 +48,8 @@ public class Main extends Repast3Launcher{
 
     private void initializeSimulation() {
         world = new World();
-        world.createSimulation();
+
+        world.createSimulation(scenario);
 
         initializeAgents();
         initializeDisplay();
@@ -76,7 +91,7 @@ public class Main extends Repast3Launcher{
 
     @Override
     public String[] getInitParam() {
-        return new String[] {};
+        return new String[] {"scenario"};
     }
     @Override
     public String getName() {
@@ -87,5 +102,13 @@ public class Main extends Repast3Launcher{
         SimInit init = new SimInit();
         init.setNumRuns(1);
         init.loadModel(new Main(), null, false);
+    }
+
+    public World.Scenario getScenario() {
+        return scenario;
+    }
+
+    public void setScenario(World.Scenario scenario) {
+        this.scenario = scenario;
     }
 }

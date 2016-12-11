@@ -52,7 +52,9 @@ public class World {
         this.sensorCells.forEach(s -> s.update(tick));
     }
 
-    public void createSimulation() { createSimulation(Scenario.EVENLY_SPACED); }
+    public void createSimulation() {
+
+        createSimulation(Scenario.EVENLY_SPACED); }
     public void createSimulation(Scenario s) {
         this.water = new Object2DGrid(this.width, this.height);
         this.waterCells = new ArrayList<>();
@@ -77,6 +79,13 @@ public class World {
                 }
                 break;
             case ALL_AT_END:
+                for (int i = 0; i < s.numSensors / 3; ++i) {
+                    for (int j = 0; j < 3; j++) {
+                        int x = i * this.height / 4 + this.height / 4;
+                        int y = (j + 1) * this.height / 4;
+                        this.addSensor(x, y);
+                    }
+                }
                 break;
             case RANDOM:
                 for (int i = 0; i < s.numSensors; ++i) {

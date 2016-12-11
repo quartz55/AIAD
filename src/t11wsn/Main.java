@@ -53,6 +53,9 @@ public class Main extends Repast3Launcher{
     }
 
     private void initializeDisplay() {
+        if(this.gui != null)
+            this.gui.cleanup();
+
         this.gui = new GUI(this, this.world);
     }
 

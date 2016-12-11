@@ -72,6 +72,11 @@ public class GUI {
         energyGraph.display();
     }
 
+    public void cleanup() {
+        this.dsurf.dispose();
+        this.energyGraph.dispose();
+    }
+
     public void render() {
         this.dsurf.updateDisplay();
     }

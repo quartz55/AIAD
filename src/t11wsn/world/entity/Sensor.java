@@ -8,11 +8,14 @@ import java.util.ArrayList;
 
 public class Sensor extends Entity{
 
-    public enum State { ON, OFF, SLEEP, DEEP_SLEEP, HIBERNATE }
+    public enum State { ON, OFF, DEEP_SLEEP, HIBERNATE }
 
     private World world;
 
-    private ArrayList<Double> readings;
+    private long numReadings = 0;
+    private double lastReading = 0;
+    private double median = 0;
+
     private double energy;
 
     private State state;
@@ -26,12 +29,12 @@ public class Sensor extends Entity{
         this.world = world;
         this.energy = MAX_ENERGY;
         this.state = State.ON;
-        this.readings = new ArrayList<>();
     }
 
     public double readSample() {
         double sample = this.world.getWaterCellAt(this.getPosition()).getPollution();
-        readings.add(sample);
+        lastReading = sample;
+        median += sample / ++numReadings;
         return sample;
     }
 
@@ -44,17 +47,24 @@ public class Sensor extends Entity{
 
         switch (this.state) {
             case ON:
-                this.energy -= 0.1;
+                this.energy -= 0.01;
+                break;
+            case DEEP_SLEEP:
+                this.energy -= 0.00003;
                 break;
             case HIBERNATE:
-                this.energy -= 0.00001;
-                break;
+                this.energy -= 0.0000002;
             case OFF:
                 break;
             default:
                 this.energy -= 0.01;
                 break;
         }
+    }
+
+    public void sleep() {
+        if (this.state != State.OFF)
+            this.state = State.DEEP_SLEEP;
     }
 
     public void hibernate() {
@@ -69,8 +79,9 @@ public class Sensor extends Entity{
         }
     }
 
-    public ArrayList<Double> getReadings() { return readings; }
-    public double getLastReading() { return readings.isEmpty() ? 0 : readings.get(readings.size()-1); }
+    public double getMedian() { return median; }
+    public double getLastReading() { return lastReading; }
+    public long getNumReadings() { return numReadings; }
 
     public State getState() { return state; }
     public double getEnergy() { return energy; }

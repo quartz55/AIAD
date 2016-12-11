@@ -34,7 +34,7 @@ public class Main extends Repast3Launcher{
 
     private void initializeSimulation() {
         world = new World();
-        world.createSimulation(World.Scenario.TEST);
+        world.createSimulation();
 
         initializeAgents();
         initializeDisplay();
@@ -59,6 +59,7 @@ public class Main extends Repast3Launcher{
     private void initializeSchedule() {
         getSchedule().scheduleActionAtInterval(1, this, "update");
         getSchedule().scheduleActionAtInterval(1, this, "render", Schedule.LAST);
+        getSchedule().scheduleActionAtInterval(50, this, "renderGraph", Schedule.LAST);
     }
 
     public void update() {
@@ -68,6 +69,7 @@ public class Main extends Repast3Launcher{
     public void render() {
         this.gui.render();
     }
+    public void renderGraph() { this.gui.renderGraphs(); }
 
     @Override
     public String[] getInitParam() {

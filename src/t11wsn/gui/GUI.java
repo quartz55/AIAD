@@ -74,6 +74,9 @@ public class GUI {
 
     public void render() {
         this.dsurf.updateDisplay();
+    }
+
+    public void renderGraphs() {
         this.energyGraph.step();
     }
 }

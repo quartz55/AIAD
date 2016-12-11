@@ -19,8 +19,8 @@ public class SensorGUI implements Drawable{
     public void draw(SimGraphics simGraphics) {
         float r, g, b;
         double e = this.entity.getEnergy();
-        if (this.entity.getState() == Sensor.State.HIBERNATE) {
-            r = g = b = 1.0f;
+        if (this.entity.getState() == Sensor.State.DEEP_SLEEP) {
+            r = g = b = 0.5f;
         }
         else if (e > Sensor.MAX_ENERGY / 2) {
             g = 1.0f;

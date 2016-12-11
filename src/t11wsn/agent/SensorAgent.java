@@ -5,31 +5,40 @@ import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
 import jade.domain.FIPAException;
 import jade.lang.acl.ACLMessage;
-import jade.lang.acl.MessageTemplate;
-import jade.lang.acl.UnreadableException;
-import javafx.geometry.Pos;
 import sajas.core.Agent;
 import sajas.core.behaviours.CyclicBehaviour;
-import sajas.core.behaviours.OneShotBehaviour;
 import sajas.core.behaviours.TickerBehaviour;
 import sajas.domain.DFService;
-import sun.plugin2.message.Message;
 import t11wsn.util.Utils;
 import t11wsn.world.entity.Sensor;
 import t11wsn.world.util.Position;
 
 import java.util.*;
 import java.util.function.Supplier;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
-import java.util.stream.DoubleStream;
+import java.util.stream.Stream;
 
 public class SensorAgent extends Agent {
+
+    class NeighbourInfo {
+        AID id;
+        double sd;
+        private long sampleSize = 0;
+        private double mean = 0;
+        double adherence; // How adherent to me
+
+        NeighbourInfo setId(AID id) { this.id = id; return this; }
+        NeighbourInfo setSD(double sd) { this.sd = sd; return this; }
+        NeighbourInfo setAdh(double adh) { this.adherence = adh; return this; }
+        NeighbourInfo addSample(double sample) { mean += sample/++sampleSize; return this; }
+        NeighbourInfo setMean(double mean, long size) { this.mean = mean; this.sampleSize = size; return this; }
+        double mean() { return mean; }
+    }
 
     private Sensor entity;
     private double stdDev;
     private ArrayList<SensorAgent> others;
-    private HashMap<AID, Position> neighbours = new HashMap<>();
+    private HashSet<AID> neighbours = new HashSet<>();
 
     public static final double MIN_STD_DEV = 0.0005;
     public static final double MAX_STD_DEV = 6.0;
@@ -60,29 +69,29 @@ public class SensorAgent extends Agent {
             System.err.println(e.getMessage());
         }
 
-        addBehaviour(new NodeBehaviour());
+        addBehaviour(new NodeBehaviour(this));
         addBehaviour(new MessageProcessing());
-        addBehaviour(new FindNeighbours(this, 200));
-        addBehaviour(new CyclicBehaviour() {
-            MessageTemplate mt = MessageTemplate.MatchPerformative(MessageType.INFORM_POSITION);
-            @Override
-            public void action() {
-                ACLMessage m = receive(mt);
-                if (m != null) {
-                    try {
-                        Position p = (Position) m.getContentObject();
-                        if (isNeighbour(p) && !neighbours.containsKey(m.getSender())) {
-                            neighbours.put(m.getSender(), p);
-                            String nString = neighbours.keySet().parallelStream().map(AID::getLocalName).collect(Collectors.joining(" | "));
-                            System.out.println(myAgent.getLocalName() + " got a new neighbour " + m.getSender().getLocalName() + ": [" + nString + "]");
-                        }
-                    } catch (UnreadableException e) { e.printStackTrace(); }
-                } else block();
-            }
-            private boolean isNeighbour (Position p) {
-                return getPosition().distanceToSquared(p) <= Math.pow(NEIGHBOUR_MAX_DISTANCE, 2);
-            }
-        });
+        addBehaviour(new FindNeighbours(this, 10));
+//        addBehaviour(new CyclicBehaviour() {
+//            MessageTemplate mt = MessageTemplate.MatchPerformative(MessageType.INFORM_POSITION);
+//            @Override
+//            public void action() {
+//                ACLMessage m = receive(mt);
+//                if (m != null) {
+//                    try {
+//                        Position p = (Position) m.getContentObject();
+//                        if (isNeighbour(p) && !neighbours.containsKey(m.getSender())) {
+//                            neighbours.put(m.getSender(), p);
+//                            String nString = neighbours.keySet().parallelStream().map(AID::getLocalName).collect(Collectors.joining(" | "));
+//                            System.out.println(myAgent.getLocalName() + " got a new neighbour " + m.getSender().getLocalName() + ": [" + nString + "]");
+//                        }
+//                    } catch (UnreadableException e) { e.printStackTrace(); }
+//                } else block();
+//            }
+//            private boolean isNeighbour (Position p) {
+//                return getPosition().distanceToSquared(p) <= Math.pow(NEIGHBOUR_MAX_DISTANCE, 2);
+//            }
+//        });
 
         System.out.println(getLocalName()+" INITIALIZED");
     }
@@ -99,16 +108,20 @@ public class SensorAgent extends Agent {
 
     private void sampleEnvironment() {
         double reading = this.entity.readSample();
-        ACLMessage msg = new ACLMessage(MessageType.INFORM_SAMPLE);
-        msg.setContent(String.valueOf(reading));
-        neighbours.keySet().parallelStream().forEach(msg::addReceiver);
+        ACLMessage msg = new ACLMessage(MessageType.INFORM_MEASUREMENT);
+        msg.setContent(String.valueOf(reading) + " " + String.valueOf(stdDev));
+        neighbours.forEach(msg::addReceiver);
         send(msg);
     }
 
     // Custom behaviours
-    private class NodeBehaviour extends CyclicBehaviour {
+    class NodeBehaviour extends TickerBehaviour {
+        NodeBehaviour(Agent a) {
+            super(a, Utils.minToTicks(10));
+        }
+
         @Override
-        public void action() {
+        protected void onTick() {
             switch (entity.getState()) {
                 case ON:
                     sampleEnvironment();
@@ -120,15 +133,13 @@ public class SensorAgent extends Agent {
         }
     }
 
-    private class MessageProcessing extends CyclicBehaviour {
-        private HashMap<AID, Double> neighbourhoodSamples = new HashMap<>();
-        private HashMap<AID, Double> neighbourhoodAdh = new HashMap<>();
+    class MessageProcessing extends CyclicBehaviour {
+        private HashMap<AID, NeighbourInfo> neighInfo = new HashMap<>();
         private HashSet<AID> dependants = new HashSet<>();
         private AID leader = null;
         private boolean isLeader = false;
 
-        private double maxAdh = 0;
-        private double maxLeader = 0;
+        private AID maxAdh = null;
 
         @Override
         public void action() {
@@ -146,43 +157,49 @@ public class SensorAgent extends Agent {
 
             switch (msg.getPerformative()) {
 
-                case MessageType.INFORM_SAMPLE: {
-                    final double sample = Double.parseDouble(msg.getContent());
-                    this.neighbourhoodSamples.put(sender, sample);
-                    double adh = adherenceTo(sample);
-                    updateMaxAdh(msg, adh);
+                case MessageType.INFORM_MEASUREMENT: {
+                    String[] content = msg.getContent().split(" ");
+                    final double sample = Double.parseDouble(content[0]);
+                    final double stdDev = Double.parseDouble(content[1]);
+
+                    // Update neigh info
+                    if (neighInfo.containsKey(sender))
+                        neighInfo.compute(sender, (id, info) -> info.addSample(sample).setSD(stdDev));
+                    else neighInfo.put(sender, new NeighbourInfo().setId(sender).addSample(sample).setSD(stdDev));
+
+                    updateMaxAdh();
 
                     break;
                 }
 
-                case MessageType.INFORM_ADH: {
+                case MessageType.INFORM_ADHERENCE: {
                     final double adherence = Double.parseDouble(msg.getContent());
-                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | ADHERENCE | " + adherence);
 
+//                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | ADHERENCE | " + adherence);
 
-                    final double leadership = leadershipTo(adherence, neighbourhoodSamples.containsKey(sender) ? neighbourhoodSamples.get(sender) : 0);
-                    System.out.println(getLocalName() + "leader("+adherence+") = " + leadership);
+                    // Update neigh info
+                    if (neighInfo.containsKey(sender))
+                        neighInfo.compute(sender, (id, info) -> info.setAdh(adherence));
+                    else neighInfo.put(sender, new NeighbourInfo().setId(sender).setAdh(adherence));
+
+                    final double leadership = leadershipTo(sender);
                     ACLMessage reply = msg.createReply();
-                    reply.setPerformative(MessageType.INFORM_LEADER);
+                    reply.setPerformative(MessageType.INFORM_LEADERSHIP);
                     reply.setContent(String.valueOf(leadership));
                     send(reply);
 
-                    if (this.neighbourhoodSamples.containsKey(sender)) {
-                        updateMaxAdh(msg, adherenceTo(this.neighbourhoodSamples.get(sender)));
-                    }
+                    updateMaxAdh();
 
                     break;
                 }
 
-                case MessageType.INFORM_LEADER: {
+                case MessageType.INFORM_LEADERSHIP: {
                     final double leadership = Double.parseDouble(msg.getContent());
-                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | LEADERSHIP | " + leadership);
+//                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | LEADERSHIP | " + leadership);
 
-                    if (this.leader == null && this.maxLeader < leadership) {
-                        this.maxLeader = leadership;
-
+                    if (this.leader == null && leadershipTo(sender) < leadership) {
                         ACLMessage reply = msg.createReply();
-                        reply.setPerformative(MessageType.FIRM_ADH);
+                        reply.setPerformative(MessageType.FIRM_ADHERENCE);
                         send(reply);
                     }
 
@@ -191,11 +208,11 @@ public class SensorAgent extends Agent {
 
 
 
-                case MessageType.FIRM_ADH: {
-                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | FIRM | ");
+                case MessageType.FIRM_ADHERENCE: {
+//                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | FIRM | ");
                     if (this.leader == null) {
                         ACLMessage reply = msg.createReply();
-                        reply.setPerformative(MessageType.ACK_ADH);
+                        reply.setPerformative(MessageType.ACK_ADHERENCE);
                         send(reply);
 
                         this.isLeader = true;
@@ -205,9 +222,9 @@ public class SensorAgent extends Agent {
                     break;
                 }
 
-                case MessageType.ACK_ADH: {
-                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | ACK | ");
-                    if (!this.isLeader && this.leader != null && this.leader != sender) {
+                case MessageType.ACK_ADHERENCE: {
+//                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | ACK | ");
+                    if (!this.isLeader && this.leader != sender) {
                         ACLMessage withdrawMsg = new ACLMessage(MessageType.WITHDRAW);
                         withdrawMsg.addReceiver(this.leader);
                         send(withdrawMsg);
@@ -222,12 +239,15 @@ public class SensorAgent extends Agent {
                     this.isLeader = false;
                     this.leader = sender;
                     System.out.println(getLocalName() + " GOING TO SLEEP");
-                    entity.hibernate();
-                    addBehaviour(new TickerBehaviour(myAgent, 2000) {
+                    entity.sleep();
+                    addBehaviour(new TickerBehaviour(myAgent, Utils.minToTicks(60 * 24)) {
                         @Override
                         protected void onTick() {
                             System.out.println(getLocalName() + " WAKING UP");
                             entity.wakeUp();
+                            leader = null;
+                            maxAdh = null;
+                            isLeader = false;
                             this.stop();
                         }
                     });
@@ -255,67 +275,76 @@ public class SensorAgent extends Agent {
             }
         }
 
-        private boolean updateMaxAdh(ACLMessage msg, double adh) {
-            if (adh > maxAdh) {
-                maxAdh = adh;
-                neighbourhoodAdh.put(msg.getSender(), adh);
-                ACLMessage reply = msg.createReply();
-                reply.setPerformative(MessageType.INFORM_ADH);
-                reply.setContent(String.valueOf(adh));
+        private boolean updateMaxAdh() {
+            Map.Entry<AID, NeighbourInfo> maxAdhInfo = neighInfo.entrySet().stream().max(Map.Entry.comparingByValue(Comparator.comparingDouble(this::adherenceTo))).orElse(null);
+
+            if ((this.maxAdh == null || this.maxAdh != maxAdhInfo.getKey()) && maxAdhInfo != null) {
+                maxAdh = maxAdhInfo.getKey();
+
+                ACLMessage reply = new ACLMessage(MessageType.INFORM_ADHERENCE);
+                reply.addReceiver(maxAdh);
+                reply.setContent(String.valueOf(adherenceTo(maxAdhInfo.getValue())));
                 send(reply);
                 return true;
             }
             return false;
         }
 
-        private double adherenceTo(double sample) {
-            double mean = Utils.mean(entity.getReadings());
+        private double adherenceTo(final NeighbourInfo neighbour) { return adherenceTo(neighbour.mean(), neighbour.sd); }
+        private double adherenceTo(final double mean, final double sd) {
+            final double eHj   = Math.exp(Utils.entropy(sd));
+            final double eHmin = Math.exp(Utils.entropy(MIN_STD_DEV));
+            final double eHmax = Math.exp(Utils.entropy(MAX_STD_DEV));
 
-            double eHj   = Math.exp(Utils.entropy(stdDev));
-            double eHmin = Math.exp(Utils.entropy(MIN_STD_DEV));
-            double eHmax = Math.exp(Utils.entropy(MAX_STD_DEV));
-
-            double similarity = Utils.pdf(sample, mean, stdDev) / Utils.pdf(mean, mean, stdDev);
-            double certainty = 1 - ((eHj - eHmin) / (eHmax - eHmin));
-
-//            System.out.println("adh("+sample+", "+getLocalName()+") = "+ similarity * certainty);
+            final double similarity = Utils.pdf(entity.getLastReading(), mean, sd) / Utils.pdf(mean, mean, sd);
+            final double certainty = 1 - ((eHj - eHmin) / (eHmax - eHmin));
 
             return similarity * certainty;
         }
 
         // TODO: Check correctness
-        private double leadershipTo(double otherAdh, double otherSample) {
+        private double leadershipTo(AID neighbour) {
+            if (!neighInfo.containsKey(neighbour)) return 0;
+
             final double selfSample = entity.getLastReading();
-            final double selfAdh = adherenceTo(selfSample);
+            final double selfAdh = adherenceTo(selfSample, stdDev);
+            final NeighbourInfo selfInfo = new NeighbourInfo().setId(getAID()).setAdh(selfAdh).setMean(entity.getMedian(), entity.getNumReadings()).setSD(stdDev);
+            final NeighbourInfo negoInfo = neighInfo.get(neighbour);
 
-            Supplier<DoubleStream> gAdh = () -> DoubleStream.concat(dependants.stream().map(neighbourhoodAdh::get).mapToDouble(Double::doubleValue), DoubleStream.of(selfAdh, otherAdh));
-            Supplier<DoubleStream> gSamples = () -> DoubleStream.concat(dependants.stream().map(neighbourhoodSamples::get).mapToDouble(Double::doubleValue), DoubleStream.of(selfSample, otherSample));
+            Supplier<Stream<NeighbourInfo>> group = () -> Stream.concat(dependants.stream().map(neighInfo::get),
+                                                                        Stream.of(selfInfo, negoInfo));
 
-            double prestige = gAdh.get().average().orElse(0);
 
-            double capacity = (entity.getEnergy() - Sensor.SECURITY_ENERGY) / Sensor.MAX_ENERGY;
 
-            double groupMean = gSamples.get().average().orElse(0);
+            final double prestige = group.get().mapToDouble(i -> i.adherence).average().orElse(0);
 
-            // CV
-            double CV = 0;
-            if (gAdh.get().count() > 0) {
-                double g2Mean = gAdh.get().average().orElse(0);
-                double g2Variance = gAdh.get().reduce(0.0, (acc, v) -> acc + Math.pow((g2Mean - v), 2)) / gAdh.get().count();
-                CV = Math.sqrt(g2Variance) / g2Mean;
-            }
+            final double capacity = (entity.getEnergy() - Sensor.SECURITY_ENERGY) / Sensor.MAX_ENERGY;
 
-            double representativeness = 1 / Math.exp(Math.abs(selfSample - groupMean) * CV);
-
-            System.out.println(getLocalName()+" : " + prestige + " | " + capacity + " | " + representativeness);
-
+            final double groupMean = group.get().mapToDouble(NeighbourInfo::mean).average().orElse(0);
+            final double groupCV = pearsonCoefficient(group);
+            final double representativeness = 1 / Math.exp(Math.abs(selfSample - groupMean) * groupCV);
 
             return prestige * capacity * representativeness;
         }
 
+        private double pearsonCoefficient(Supplier<Stream<NeighbourInfo>> group) {
+            final double sumMean = group.get().mapToDouble(NeighbourInfo::mean).sum();
+            final double sumSD = group.get().mapToDouble(i -> i.sd).sum();
+            if (sumMean == 0 || sumSD == 0) return 0;
+            final double sumMeanSD = group.get().mapToDouble(i-> i.mean() * i.sd).sum();
+            final double sumMeanSquared = group.get().mapToDouble(i-> Math.pow(i.mean(), 2)).sum();
+            final double sumSDSquared = group.get().mapToDouble(i-> Math.pow(i.sd, 2)).sum();
+            final long n = group.get().count();
+
+            final double upper = (n * sumMeanSD) - (sumMean * sumSD);
+            final double lower = Math.sqrt((n * sumMeanSquared - Math.pow(sumMean, 2)) * (n * sumSDSquared - Math.pow(sumSD, 2)));
+
+            return upper / lower;
+        }
+
     }
 
-    private class FindNeighbours extends TickerBehaviour {
+    class FindNeighbours extends TickerBehaviour {
         DFAgentDescription t = new DFAgentDescription();
         ServiceDescription sd = new ServiceDescription();
 
@@ -329,9 +358,10 @@ public class SensorAgent extends Agent {
         @Override
         protected void onTick() {
             neighbours = others.stream()
-                                .filter(sa -> !sa.getAID().equals(getAID()))
-                                .filter(sa -> getPosition().distanceToSquared(sa.getPosition()) <= Math.pow(NEIGHBOUR_MAX_DISTANCE, 2))
-                                .collect(HashMap<AID, Position>::new, (m, sa) -> m.put(sa.getAID(), sa.getPosition()), (m, sa) -> {});
+                               .filter(sa -> !sa.getAID().equals(getAID()))
+                               .filter(sa -> getPosition().distanceToSquared(sa.getPosition()) <= Math.pow(NEIGHBOUR_MAX_DISTANCE, 2))
+                               .map(Agent::getAID)
+                               .collect(Collectors.toCollection(HashSet::new));
 
 //            try {
 //                ACLMessage m = new ACLMessage(MessageType.INFORM_POSITION);
@@ -351,5 +381,5 @@ public class SensorAgent extends Agent {
         }
     }
 
-    public Position getPosition() { return this.entity.getPosition(); }
+    private Position getPosition() { return this.entity.getPosition(); }
 }

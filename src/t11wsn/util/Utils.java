@@ -43,6 +43,9 @@ public class Utils {
         }
     }
 
+    public static long minToTicks(int min) { return (min * 30) / 10; }
+
     public static void main(String[] args) {
+        System.out.println(pdf(160, 5, 3) / pdf(5, 5, 3));
     }
 }

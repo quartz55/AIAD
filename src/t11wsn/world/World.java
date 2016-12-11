@@ -30,10 +30,10 @@ public class World {
     private ArrayList<Water> waterCells;
     private ArrayList<Sensor> sensorCells;
 
-    public static final double SEDIMENTATION_FACTOR = 0.99;
+    public static final double SEDIMENTATION_FACTOR = 0.9999;
 
     public World() {
-        this(500, 100);
+        this(250, 10);
     }
     public World(int width, int height) {
         this.width = width;
@@ -67,12 +67,11 @@ public class World {
         }
 
         // Sensors
-        final int padding = 20;
-        final int spacing = (int) ((this.width - 2 * padding) / s.numSensors);
+        final int spacing = (int) ((this.width) / s.numSensors);
         switch(s) {
             case EVENLY_SPACED:
                 for (int i = 0; i < s.numSensors; ++i) {
-                   int x = i * spacing + padding;
+                   int x = i * spacing;
                    int y = this.height / 2;
                    this.addSensor(x, y);
                 }
@@ -81,8 +80,8 @@ public class World {
                 break;
             case RANDOM:
                 for (int i = 0; i < s.numSensors; ++i) {
-                    int x = Utils.randInt(padding, this.width - 2 * padding);
-                    int y = Utils.randInt(padding, this.height - 2 * padding);
+                    int x = Utils.randInt(0, this.width - 1);
+                    int y = Utils.randInt(0, this.height - 1);
                     this.addSensor(x, y);
                 }
                 break;
@@ -96,10 +95,10 @@ public class World {
     }
 
     private void spewPollutant(double tick) {
-        final int stainSize = (int) (0.3 * this.height);
+        final int stainSize = (int) (1 * this.height);
         final int X = this.width - 1;
         final int Y = this.height/2 - stainSize/2;
-        final double osc = Math.sin(tick / 20);
+        final double osc = Math.sin(tick / 10);
         final double pollution = Math.max(0, osc * Water.MAX_POLLUTION);
         final IntConsumer spew = y -> getWaterCellAt(X, y).setPollution(pollution);
 

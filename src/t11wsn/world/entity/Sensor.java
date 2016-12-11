@@ -1,20 +1,17 @@
 package t11wsn.world.entity;
 
-import t11wsn.util.Utils;
 import t11wsn.world.World;
 import t11wsn.world.util.Position;
 
-import java.util.ArrayList;
-
 public class Sensor extends Entity{
 
-    public enum State { ON, OFF, DEEP_SLEEP, HIBERNATE }
+    public enum State { ON, CRITICAL, OFF, DEEP_SLEEP, HIBERNATE }
 
     private World world;
 
     private long numReadings = 0;
     private double lastReading = 0;
-    private double median = 0;
+    private double mean = 0;
 
     private double energy;
 
@@ -34,14 +31,19 @@ public class Sensor extends Entity{
     public double readSample() {
         double sample = this.world.getWaterCellAt(this.getPosition()).getPollution();
         lastReading = sample;
-        median += sample / ++numReadings;
+        mean += sample / ++numReadings;
         return sample;
     }
 
+    public double realSample() {
+        return this.world.getWaterCellAt(this.getPosition()).getPollution();
+    }
+
     public void update(double tick) {
-        if (this.energy <= 0) {
+        if (this.state == State.OFF) return;
+        else if (this.energy <= SECURITY_ENERGY) {
             this.energy = 0;
-            this.state = State.OFF;
+            this.state = State.CRITICAL;
             return;
         }
 
@@ -62,24 +64,12 @@ public class Sensor extends Entity{
         }
     }
 
-    public void sleep() {
-        if (this.state != State.OFF)
-            this.state = State.DEEP_SLEEP;
-    }
+    public void switchOff() { this.state = State.OFF; }
+    public void sleep() { if (this.state != State.OFF && this.state != State.CRITICAL) this.state = State.DEEP_SLEEP; }
+    public void hibernate() { if (this.state != State.OFF && this.state != State.CRITICAL) this.state = State.HIBERNATE; }
+    public void wakeUp() { if (this.state != State.OFF && this.state != State.CRITICAL) this.state = State.ON; }
 
-    public void hibernate() {
-        if (this.state != State.OFF) {
-            this.state = State.HIBERNATE;
-        }
-    }
-
-    public void wakeUp() {
-        if (this.state != State.OFF) {
-            this.state = State.ON;
-        }
-    }
-
-    public double getMedian() { return median; }
+    public double getMean() { return mean; }
     public double getLastReading() { return lastReading; }
     public long getNumReadings() { return numReadings; }
 

@@ -1,7 +1,8 @@
 package t11wsn.gui;
 
-import sajas.sim.repast3.Repast3Launcher;
+import t11wsn.Main;
 import t11wsn.gui.entity.SensorGUI;
+import t11wsn.gui.entity.SinkGUI;
 import t11wsn.gui.entity.WaterGUI;
 import t11wsn.util.Utils;
 import t11wsn.world.World;
@@ -20,8 +21,9 @@ public class GUI {
     private ArrayList<WaterGUI> water;
 
     private OpenSequenceGraph energyGraph;
+    private OpenSequenceGraph qualityGraph;
 
-    public GUI(Repast3Launcher model, World world) {
+    public GUI(Main model, World world) {
         String name = "River Top Down View";
         dsurf = new DisplaySurface(model, name);
         model.registerDisplaySurface(name, dsurf);
@@ -48,6 +50,9 @@ public class GUI {
                 })
                 .collect(Collectors.toCollection(ArrayList::new));
         sensorDisplay.setObjectList(sensors);
+
+        SinkGUI g = new SinkGUI(world.getSinkNode());
+        world2D.putObjectAt(g.getX(), g.getY(), g);
         dsurf.addDisplayableProbeable(sensorDisplay, "Show sensors");
 
         model.addSimEventListener(dsurf);
@@ -55,20 +60,40 @@ public class GUI {
 
         // Graph
         energyGraph = new OpenSequenceGraph("Energy Information", model);
-        energyGraph.setAxisTitles("Time", "Energy");
+        energyGraph.setAxisTitles("Time", "Network remaining energy");
 
-        energyGraph.addSequence("Energy Median", () -> {
+        energyGraph.addSequence("Median", () -> {
             return Utils.median(
                     world.getSensors().stream()
                     .mapToDouble(Sensor::getEnergy)
                     .sorted().toArray());
 
         });
-        energyGraph.addSequence("Energy Mean", () -> {
+        energyGraph.addSequence("Mean", () -> {
             return world.getSensors().stream().mapToDouble(Sensor::getEnergy).average().orElse(0);
         });
 
+        qualityGraph = new OpenSequenceGraph("Error Information", model);
+        qualityGraph.setAxisTitles("Time", "Network mean error");
+
+        qualityGraph.addSequence("Network mean error", () -> {
+            return model.agents.stream()
+                    .filter(s -> s.getEntity().getEnergy() > 0)
+                    .filter(s -> world.getSinkNode().sensorsReadings.containsKey(s.getAID()))
+                    .mapToDouble(s -> {
+                        double realValue = s.getEntity().realSample();
+                        double sinkReading = world.getSinkNode().sensorsReadings.getOrDefault(s.getAID(), 0.0);
+//                        System.out.println(realValue + " | " + sinkReading);
+                        return Math.abs(sinkReading - realValue);
+                    }).average().orElse(0);
+        });
+
+//        qualityGraph.addSequence("Entropy", () -> {
+//
+//        });
+
         energyGraph.display();
+        qualityGraph.display();
     }
 
     public void cleanup() {
@@ -82,5 +107,6 @@ public class GUI {
 
     public void renderGraphs() {
         this.energyGraph.step();
+        this.qualityGraph.step();
     }
 }

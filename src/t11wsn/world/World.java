@@ -2,6 +2,7 @@ package t11wsn.world;
 
 import t11wsn.util.Utils;
 import t11wsn.world.entity.Sensor;
+import t11wsn.world.entity.Sink;
 import t11wsn.world.entity.Water;
 import t11wsn.world.util.Position;
 import uchicago.src.sim.space.Object2DGrid;
@@ -14,7 +15,7 @@ import java.util.stream.IntStream;
 public class World {
 
     public enum Scenario {
-        EVENLY_SPACED(50), ALL_AT_END(30), RANDOM(50), TEST(2);
+        EVENLY_SPACED(50), ALL_AT_END(30), RANDOM(50), TEST(20);
         private int numSensors;
 
         Scenario(int numSensors) {
@@ -29,6 +30,8 @@ public class World {
 
     private ArrayList<Water> waterCells;
     private ArrayList<Sensor> sensorCells;
+
+    private Sink sinkNode;
 
     public static final double SEDIMENTATION_FACTOR = 0.9999;
 
@@ -101,6 +104,9 @@ public class World {
                     this.addSensor(x, y);
                 }
         }
+
+        // Sink
+        sinkNode = new Sink(new Position(this.width-1, this.height/2));
     }
 
     private void spewPollutant(double tick) {
@@ -136,6 +142,7 @@ public class World {
 
     public List<Sensor> getSensors() { return this.sensorCells; }
     public ArrayList<Water> getWaterCells() { return waterCells; }
+    public Sink getSinkNode() { return sinkNode; }
 
     public double getPollutionAt(int x, int y) {
         if (x >= 0 && x < this.width && y >= 0 && y < this.height)

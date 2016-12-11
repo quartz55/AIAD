@@ -93,12 +93,12 @@ public class SensorAgent extends Agent {
 //            }
 //        });
 
-        System.out.println(getLocalName()+" INITIALIZED");
+//        System.out.println(getLocalName()+" INITIALIZED");
     }
 
     @Override
     protected void takeDown() {
-        System.out.println(getLocalName()+" OUT OF ENERGY!");
+//        System.out.println(getLocalName()+" OUT OF ENERGY!");
         try {
             DFService.deregister(this);
         } catch (FIPAException e) {
@@ -106,26 +106,53 @@ public class SensorAgent extends Agent {
         }
     }
 
-    private void sampleEnvironment() {
-        double reading = this.entity.readSample();
-        ACLMessage msg = new ACLMessage(MessageType.INFORM_MEASUREMENT);
-        msg.setContent(String.valueOf(reading) + " " + String.valueOf(stdDev));
-        neighbours.forEach(msg::addReceiver);
-        send(msg);
-    }
 
     // Custom behaviours
     class NodeBehaviour extends TickerBehaviour {
+        DFAgentDescription t = new DFAgentDescription();
+        ServiceDescription sd = new ServiceDescription();
+
         NodeBehaviour(Agent a) {
             super(a, Utils.minToTicks(10));
+            sd.setType("sink");
+            t.addServices(sd);
         }
 
         @Override
         protected void onTick() {
             switch (entity.getState()) {
-                case ON:
-                    sampleEnvironment();
+                case ON: {
+                    double reading = SensorAgent.this.entity.readSample();
+                    ACLMessage msg = new ACLMessage(MessageType.INFORM_MEASUREMENT);
+                    msg.setContent(String.valueOf(reading) + " " + String.valueOf(stdDev));
+                    neighbours.forEach(msg::addReceiver);
+
+                    // Also send to sink (if there is one)
+                    try {
+                        DFAgentDescription[] res = DFService.search(myAgent, t);
+                        Arrays.stream(res).forEach(d -> msg.addReceiver(d.getName()));
+                    } catch (FIPAException e) {
+                        e.printStackTrace();
+                    }
+
+                    send(msg);
+
                     break;
+                }
+                case CRITICAL: {
+                    // Inform sink sensor is going offline
+                    ACLMessage msg = new ACLMessage(MessageType.INFORM_OFFLINE);
+                    try {
+                        DFAgentDescription[] res = DFService.search(myAgent, t);
+                        Arrays.stream(res).forEach(d -> msg.addReceiver(d.getName()));
+                    } catch (FIPAException e) {
+                        e.printStackTrace();
+                    }
+                    send(msg);
+                    entity.switchOff();
+
+                    break;
+                }
                 case OFF:
                     myAgent.doDelete();
                     break;
@@ -238,12 +265,12 @@ public class SensorAgent extends Agent {
 
                     this.isLeader = false;
                     this.leader = sender;
-                    System.out.println(getLocalName() + " GOING TO SLEEP");
+//                    System.out.println(getLocalName() + " GOING TO SLEEP");
                     entity.sleep();
                     addBehaviour(new TickerBehaviour(myAgent, Utils.minToTicks(60 * 24)) {
                         @Override
                         protected void onTick() {
-                            System.out.println(getLocalName() + " WAKING UP");
+//                            System.out.println(getLocalName() + " WAKING UP");
                             entity.wakeUp();
                             leader = null;
                             maxAdh = null;
@@ -308,7 +335,7 @@ public class SensorAgent extends Agent {
 
             final double selfSample = entity.getLastReading();
             final double selfAdh = adherenceTo(selfSample, stdDev);
-            final NeighbourInfo selfInfo = new NeighbourInfo().setId(getAID()).setAdh(selfAdh).setMean(entity.getMedian(), entity.getNumReadings()).setSD(stdDev);
+            final NeighbourInfo selfInfo = new NeighbourInfo().setId(getAID()).setAdh(selfAdh).setMean(entity.getMean(), entity.getNumReadings()).setSD(stdDev);
             final NeighbourInfo negoInfo = neighInfo.get(neighbour);
 
             Supplier<Stream<NeighbourInfo>> group = () -> Stream.concat(dependants.stream().map(neighInfo::get),
@@ -382,4 +409,5 @@ public class SensorAgent extends Agent {
     }
 
     private Position getPosition() { return this.entity.getPosition(); }
+    public Sensor getEntity() { return entity; }
 }

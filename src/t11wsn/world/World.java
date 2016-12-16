@@ -15,7 +15,7 @@ import java.util.stream.IntStream;
 public class World {
 
     public enum Scenario {
-        EVENLY_SPACED(50), ALL_AT_END(30), RANDOM(50), TEST(20);
+        EVENLY_SPACED(50), ALL_AT_END(30), RANDOM(50), TEST(3);
         private int numSensors;
 
         Scenario(int numSensors) {

@@ -113,7 +113,7 @@ public class SensorAgent extends Agent {
         ServiceDescription sd = new ServiceDescription();
 
         NodeBehaviour(Agent a) {
-            super(a, Utils.minToTicks(10));
+            super(a, Utils.minToTicks(50));
             sd.setType("sink");
             t.addServices(sd);
         }
@@ -172,7 +172,7 @@ public class SensorAgent extends Agent {
         public void action() {
             ACLMessage msg = myAgent.receive();
 
-            if (entity.getState() == Sensor.State.ON && msg != null && msg.getSender() != myAgent.getAID()) {
+            if (msg != null && msg.getSender() != myAgent.getAID()) {
                 handleMessage(msg);
             } else {
                 block();
@@ -182,122 +182,127 @@ public class SensorAgent extends Agent {
         private void handleMessage(ACLMessage msg) {
             AID sender = msg.getSender();
 
-            switch (msg.getPerformative()) {
+            if (entity.getState() == Sensor.State.ON) {
+                switch (msg.getPerformative()) {
 
-                case MessageType.INFORM_MEASUREMENT: {
-                    String[] content = msg.getContent().split(" ");
-                    final double sample = Double.parseDouble(content[0]);
-                    final double stdDev = Double.parseDouble(content[1]);
+                    case MessageType.INFORM_MEASUREMENT: {
+                        String[] content = msg.getContent().split(" ");
+                        final double sample = Double.parseDouble(content[0]);
+                        final double stdDev = Double.parseDouble(content[1]);
 
-                    // Update neigh info
-                    if (neighInfo.containsKey(sender))
-                        neighInfo.compute(sender, (id, info) -> info.addSample(sample).setSD(stdDev));
-                    else neighInfo.put(sender, new NeighbourInfo().setId(sender).addSample(sample).setSD(stdDev));
+                        // Update neigh info
+                        if (neighInfo.containsKey(sender))
+                            neighInfo.compute(sender, (id, info) -> info.addSample(sample).setSD(stdDev));
+                        else neighInfo.put(sender, new NeighbourInfo().setId(sender).addSample(sample).setSD(stdDev));
 
-                    updateMaxAdh();
+                        updateMaxAdh();
 
-                    break;
-                }
-
-                case MessageType.INFORM_ADHERENCE: {
-                    final double adherence = Double.parseDouble(msg.getContent());
-
-//                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | ADHERENCE | " + adherence);
-
-                    // Update neigh info
-                    if (neighInfo.containsKey(sender))
-                        neighInfo.compute(sender, (id, info) -> info.setAdh(adherence));
-                    else neighInfo.put(sender, new NeighbourInfo().setId(sender).setAdh(adherence));
-
-                    final double leadership = leadershipTo(sender);
-                    ACLMessage reply = msg.createReply();
-                    reply.setPerformative(MessageType.INFORM_LEADERSHIP);
-                    reply.setContent(String.valueOf(leadership));
-                    send(reply);
-
-                    updateMaxAdh();
-
-                    break;
-                }
-
-                case MessageType.INFORM_LEADERSHIP: {
-                    final double leadership = Double.parseDouble(msg.getContent());
-//                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | LEADERSHIP | " + leadership);
-
-                    if (this.leader == null && leadershipTo(sender) < leadership) {
-                        ACLMessage reply = msg.createReply();
-                        reply.setPerformative(MessageType.FIRM_ADHERENCE);
-                        send(reply);
+                        break;
                     }
 
-                    break;
-                }
+                    case MessageType.INFORM_ADHERENCE: {
+                        final double adherence = Double.parseDouble(msg.getContent());
 
+                        //                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | ADHERENCE | " + adherence);
 
+                        // Update neigh info
+                        if (neighInfo.containsKey(sender))
+                            neighInfo.compute(sender, (id, info) -> info.setAdh(adherence));
+                        else neighInfo.put(sender, new NeighbourInfo().setId(sender).setAdh(adherence));
 
-                case MessageType.FIRM_ADHERENCE: {
-//                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | FIRM | ");
-                    if (this.leader == null) {
+                        final double leadership = leadershipTo(sender);
                         ACLMessage reply = msg.createReply();
-                        reply.setPerformative(MessageType.ACK_ADHERENCE);
+                        reply.setPerformative(MessageType.INFORM_LEADERSHIP);
+                        reply.setContent(String.valueOf(leadership));
                         send(reply);
 
-                        this.isLeader = true;
-                        this.dependants.add(sender);
+                        updateMaxAdh();
+
+                        break;
                     }
 
-                    break;
-                }
+                    case MessageType.INFORM_LEADERSHIP: {
+                        final double leadership = Double.parseDouble(msg.getContent());
+                        //                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | LEADERSHIP | " + leadership);
 
-                case MessageType.ACK_ADHERENCE: {
-//                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | ACK | ");
-                    if (!this.isLeader && this.leader != sender) {
-                        ACLMessage withdrawMsg = new ACLMessage(MessageType.WITHDRAW);
-                        withdrawMsg.addReceiver(this.leader);
-                        send(withdrawMsg);
-                    }
-                    if (this.isLeader && !this.dependants.isEmpty()) {
-                        ACLMessage breakMsg = new ACLMessage(MessageType.BREAK);
-                        dependants.forEach(breakMsg::addReceiver);
-                        send(breakMsg);
-                        dependants.clear();
-                    }
-
-                    this.isLeader = false;
-                    this.leader = sender;
-//                    System.out.println(getLocalName() + " GOING TO SLEEP");
-                    entity.sleep();
-                    addBehaviour(new TickerBehaviour(myAgent, Utils.minToTicks(60 * 24)) {
-                        @Override
-                        protected void onTick() {
-//                            System.out.println(getLocalName() + " WAKING UP");
-                            entity.wakeUp();
-                            leader = null;
-                            maxAdh = null;
-                            isLeader = false;
-                            this.stop();
+                        if (this.leader == null && leadershipTo(sender) < leadership) {
+                            ACLMessage reply = msg.createReply();
+                            reply.setPerformative(MessageType.FIRM_ADHERENCE);
+                            send(reply);
                         }
-                    });
 
-                    break;
+                        break;
+                    }
+
+
+                    case MessageType.FIRM_ADHERENCE: {
+                        //                    System.out.println(getLocalName() + " <==== " + sender.getLocalName() +" | FIRM | ");
+                        if (this.leader == null) {
+                            ACLMessage reply = msg.createReply();
+                            reply.setPerformative(MessageType.ACK_ADHERENCE);
+                            send(reply);
+
+                            this.isLeader = true;
+                            this.dependants.add(sender);
+                        }
+
+                        break;
+                    }
                 }
+            }
+            if (entity.getState() == Sensor.State.ON || entity.getState() == Sensor.State.DEEP_SLEEP) {
+                switch (msg.getPerformative()) {
+                    case MessageType.ACK_ADHERENCE: {
+                        if (!this.isLeader && this.leader != sender) {
+                            ACLMessage withdrawMsg = new ACLMessage(MessageType.WITHDRAW);
+                            withdrawMsg.addReceiver(this.leader);
+                            send(withdrawMsg);
+                        }
+                        if (this.isLeader && !this.dependants.isEmpty()) {
+                            ACLMessage breakMsg = new ACLMessage(MessageType.BREAK);
+                            dependants.forEach(breakMsg::addReceiver);
+                            send(breakMsg);
+                            dependants.clear();
+                        }
 
-                case MessageType.BREAK: {
-                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | BREAK | ");
-
-                    this.leader = null;
-
-                    break;
-                }
-
-                case MessageType.WITHDRAW: {
-                    System.out.println(sender.getLocalName() + " ====> " + getLocalName() +" | WITHDRAW | ");
-
-                    this.dependants.remove(sender);
-                    if (this.dependants.isEmpty())
                         this.isLeader = false;
+                        this.leader = sender;
+                        entity.sleep();
+                        addBehaviour(new TickerBehaviour(myAgent, Utils.minToTicks(60 * 24)) {
+                            @Override
+                            protected void onTick() {
+                                if (entity.getState() == Sensor.State.DEEP_SLEEP) {
+                                    entity.wakeUp();
+                                    leader = null;
+                                    maxAdh = null;
+                                    isLeader = false;
+                                }
+                                this.stop();
+                            }
+                        });
 
-                    break;
+                        break;
+                    }
+                    case MessageType.BREAK: {
+                        // System.out.println(sender.getLocalName() + " ====> " + getLocalName() + " | BREAK | ");
+
+                        entity.wakeUp();
+                        this.leader = null;
+                        maxAdh = null;
+                        isLeader = false;
+
+                        break;
+                    }
+
+                    case MessageType.WITHDRAW: {
+                        // System.out.println(sender.getLocalName() + " ====> " + getLocalName() + " | WITHDRAW | ");
+
+                        this.dependants.remove(sender);
+                        if (this.dependants.isEmpty())
+                            this.isLeader = false;
+
+                        break;
+                    }
                 }
             }
         }
